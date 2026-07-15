@@ -64,9 +64,10 @@ public class DiscordEmbedPublisher : IPublisherService
             {
                 _logger.LogWarning("Couldn't find channel with id {ChannelId} for publishing news",
                     channelId);
+                continue;
             }
 
-            await channel!.SendMessageAsync(embed);
+            await channel.SendMessageAsync(embed);
         }
     }
 }

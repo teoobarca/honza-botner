@@ -76,12 +76,12 @@ public class AbcPoll : Poll
             .ModifyAsync(new DiscordMessageBuilder()
                 .AddEmbed(Modify(client, ExistingPollMessage.Embeds[0], emojisToAdd)));
 
-        Task _ = Task.Run(async () => { await AddReactionsAsync(client, ExistingPollMessage, emojisToAdd); });
+        await AddReactionsAsync(client, ExistingPollMessage, emojisToAdd);
     }
 
     private DiscordEmbed Modify(DiscordClient client, DiscordEmbed original, IEnumerable<string> emojisToAdd)
     {
-        DiscordEmbedBuilder builder = new (original);
+        DiscordEmbedBuilder builder = new(original);
 
         NewChoices.Zip(emojisToAdd).ToList().ForEach(pair =>
         {

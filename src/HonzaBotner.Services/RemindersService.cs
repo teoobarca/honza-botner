@@ -50,6 +50,9 @@ public class RemindersService : IRemindersService
         await _dbContext.SaveChangesAsync();
     }
 
+    public async Task<bool> TryClaimReminderAsync(int id) =>
+        await _dbContext.Reminders.Where(reminder => reminder.Id == id).ExecuteDeleteAsync() == 1;
+
     public async Task<Reminder?> GetByMessageIdAsync(ulong messageId)
     {
         Database.Reminder? reminder = await _dbContext.Reminders
@@ -61,6 +64,9 @@ public class RemindersService : IRemindersService
 
         return GetDto(reminder);
     }
+
+    public Task<int> CountActiveForUserAsync(ulong ownerId) =>
+        _dbContext.Reminders.CountAsync(reminder => reminder.OwnerId == ownerId);
 
     public async Task<List<Reminder>> GetRemindersToExecuteAsync(DateTime? dateTime)
     {

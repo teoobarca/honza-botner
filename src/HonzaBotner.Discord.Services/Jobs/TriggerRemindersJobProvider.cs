@@ -9,9 +9,9 @@ using HonzaBotner.Discord.Managers;
 using HonzaBotner.Discord.Services.Options;
 using HonzaBotner.Scheduler.Contract;
 using HonzaBotner.Services.Contract;
+using HonzaBotner.Services.Contract.Dto;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using HonzaBotner.Services.Contract.Dto;
 
 namespace HonzaBotner.Discord.Services.Jobs;
 
@@ -49,10 +49,13 @@ public class TriggerRemindersJobProvider : IJob
     {
         var now = DateTime.UtcNow; // Fix one point in time.
         var reminders = await _remindersService.GetRemindersToExecuteAsync(now);
-        await _remindersService.DeleteExecutedRemindersAsync(now);
 
         foreach (var reminder in reminders)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!await _remindersService.TryClaimReminderAsync(reminder.Id)) continue;
             await SendReminderNotification(reminder);
+        }
     }
 
     private async Task SendReminderNotification(Reminder reminder)
@@ -66,8 +69,7 @@ public class TriggerRemindersJobProvider : IJob
             // Get receivers from reactions + reminder owner.
             var receiversFromReactions = await message.GetReactionsAsync(emoji);
             var receivers = receiversFromReactions.Where(user => !user.IsBot)
-                .Select(u => u.Id).ToList();
-            receivers.Add(reminder.OwnerId);
+                .Select(u => u.Id).Append(reminder.OwnerId).Distinct().ToList();
 
             DiscordEmbed embed = await _reminderManager.CreateDmReminderEmbedAsync(reminder);
             var remindedUsers = new StringBuilder("Ahoj ");

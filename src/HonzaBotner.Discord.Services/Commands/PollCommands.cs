@@ -109,7 +109,7 @@ public class PollCommands : ApplicationCommandModule
         {
             DiscordRole modRole = (await _guildProvider.GetCurrentGuildAsync()).GetRole(_options.ModRoleId);
 
-            AbcPoll poll = new (originalMessage);
+            AbcPoll poll = new(originalMessage);
 
             if (poll.AuthorMention != ctx.Member?.Mention && !(ctx.Member?.Roles.Contains(modRole) ?? false))
             {

@@ -38,7 +38,10 @@ public class RoleBindingsService : IRoleBindingsService
         {
             RoleBinding binding = new()
             {
-                ChannelId = channelId, MessageId = messageId, Emoji = emoji, RoleId = roleId
+                ChannelId = channelId,
+                MessageId = messageId,
+                Emoji = emoji,
+                RoleId = roleId
             };
 
             if (await _dbContext.RoleBindings.AnyAsync(db => db.Emoji == binding.Emoji &&

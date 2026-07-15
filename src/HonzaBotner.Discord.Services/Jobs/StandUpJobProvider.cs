@@ -100,11 +100,11 @@ public class StandUpJobProvider : IJob
                 }
             }
 
-            if(ok.Add(fail).Sum == 0)
+            if (ok.Add(fail).Sum == 0)
             {
                 return;
             }
-            
+
             DiscordRole standupPingRole = channel.Guild.GetRole(_commonOptions.StandUpRoleId);
 
             var content = new DiscordMessageBuilder()
@@ -119,7 +119,7 @@ failed:     {fail}
 ```
 ||{standupPingRole.Mention}||")
                 .AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, _buttonOptions.StandupSwitchPingId,
-                "Switch ping", emoji:new DiscordComponentEmoji("🔔")))
+                "Switch ping", emoji: new DiscordComponentEmoji("🔔")))
                 .WithAllowedMention(new RoleMention(standupPingRole));
             await channel.SendMessageAsync(content);
         }

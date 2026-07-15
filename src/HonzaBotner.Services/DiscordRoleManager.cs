@@ -48,20 +48,43 @@ public sealed class DiscordRoleManager : IDiscordRoleManager
             roles.Add(role);
         }
 
-        // TODO: job queue
-        Task _ = Task.Run(async () =>
+        List<DRole> grantedRoles = new();
+        DiscordMember? member = null;
+        try
         {
-            DiscordMember member = await guild.GetMemberAsync(userId);
+            member = await guild.GetMemberAsync(userId);
             foreach (DRole role in roles)
             {
                 await member.GrantRoleAsync(role, "Auth");
+                grantedRoles.Add(role);
             }
-        });
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Granting authentication roles to user {UserId} failed", userId);
+            if (member is not null)
+            {
+                foreach (DRole grantedRole in grantedRoles)
+                {
+                    try
+                    {
+                        await member.RevokeRoleAsync(grantedRole, "Rollback failed authentication role grant");
+                    }
+                    catch (Exception rollbackException)
+                    {
+                        _logger.LogCritical(rollbackException,
+                            "Rolling back role {RoleId} for user {UserId} failed", grantedRole.Id, userId);
+                    }
+                }
+            }
+            return false;
+        }
 
         return true;
     }
 
-    public async Task<bool> RevokeRolesPoolAsync(ulong userId, RolesPool rolesPool)
+    public async Task<bool> RevokeRolesPoolAsync(ulong userId, RolesPool rolesPool,
+        bool includeAuthenticatedRoles = false)
     {
         bool returnValue = true;
         DiscordGuild guild = await _guildProvider.GetCurrentGuildAsync();
@@ -100,7 +123,7 @@ public sealed class DiscordRoleManager : IDiscordRoleManager
         {
             if (member.Roles.Contains(role)
                 // Don't remove any of the authenticated roles.
-                && !_roleConfig.AuthenticatedRoleIds.Contains(role.Id))
+                && (includeAuthenticatedRoles || !_roleConfig.AuthenticatedRoleIds.Contains(role.Id)))
             {
                 await member.RevokeRoleAsync(role, "Auth");
             }
@@ -124,7 +147,10 @@ public sealed class DiscordRoleManager : IDiscordRoleManager
 
         foreach (string rolePrefix in knowUserRolePrefixes)
         {
-            bool containsRole = kosRoles.Any(role => role.StartsWith(rolePrefix));
+            bool containsRole = kosRoles.Any(role =>
+                role.Equals(rolePrefix, StringComparison.Ordinal) ||
+                (role.StartsWith(rolePrefix, StringComparison.Ordinal) && role.Length > rolePrefix.Length &&
+                 role[rolePrefix.Length] == '-'));
 
             if (containsRole)
             {

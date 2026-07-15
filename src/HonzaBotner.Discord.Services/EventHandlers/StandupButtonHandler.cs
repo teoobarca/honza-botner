@@ -40,7 +40,7 @@ public class StandupButtonHandler : IEventHandler<ComponentInteractionCreateEven
 
         DiscordMember target = await args.Guild.GetMemberAsync(args.User.Id);
         DiscordRole standupPingRole = args.Guild.GetRole(_commandOptions.StandUpRoleId);
-        StringBuilder response = new ();
+        StringBuilder response = new();
 
         try
         {

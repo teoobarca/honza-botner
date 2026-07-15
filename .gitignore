@@ -4,6 +4,12 @@
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
 # User-specific files
+.env
+.env.*
+!.env.example
+secrets.json
+*.pem
+*.key
 *.rsuser
 *.suo
 *.user
@@ -372,4 +378,3 @@ postgres-data/
 
 # VS Code
 .vscode
-

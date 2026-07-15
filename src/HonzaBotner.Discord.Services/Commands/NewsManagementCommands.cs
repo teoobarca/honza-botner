@@ -10,6 +10,7 @@ using DSharpPlus.Entities;
 using DSharpPlus.Interactivity.Enums;
 using DSharpPlus.Interactivity.Extensions;
 using DSharpPlus.SlashCommands;
+using DSharpPlus.SlashCommands.Attributes;
 using HonzaBotner.Discord.Services.Jobs;
 using HonzaBotner.Services.Contract;
 using HonzaBotner.Services.Contract.Dto;
@@ -19,6 +20,7 @@ namespace HonzaBotner.Discord.Services.Commands;
 [SlashCommandGroup("news", "Commands to work with news.")]
 [SlashModuleLifespan(SlashModuleLifespan.Scoped)]
 [SlashCommandPermissions(Permissions.ManageChannels)]
+[SlashRequirePermissions(Permissions.ManageChannels)]
 public class NewsManagementCommands : ApplicationCommandModule
 {
     private readonly INewsConfigService _configService;
@@ -36,7 +38,7 @@ public class NewsManagementCommands : ApplicationCommandModule
         IList<NewsConfig> configs = await _configService.ListConfigsAsync(false).ConfigureAwait(false);
 
         DiscordEmbedBuilder builder = new() { Title = "News List" };
-        builder.WithTimestamp(DateTime.Now);
+        builder.WithTimestamp(DateTime.UtcNow);
 
         StringBuilder stringBuilder = new("\n");
 
@@ -79,7 +81,7 @@ public class NewsManagementCommands : ApplicationCommandModule
         builder.AddField("Sourcing news via", config.NewsProvider.ToString());
         builder.AddField("Publishing news via", config.Publisher.ToString());
 
-        builder.WithTimestamp(DateTime.Now);
+        builder.WithTimestamp(DateTime.UtcNow);
 
         await ctx.CreateResponseAsync(builder.Build());
     }
@@ -115,6 +117,14 @@ public class NewsManagementCommands : ApplicationCommandModule
         NewsConfig config = new(default, name, source, parsedDateTime.Value, NewsProviderType.Courses, PublisherType.DiscordEmbed,
             true, ctx.ResolvedChannelMentions.Select(ch => ch.Id).ToArray());
 
+        if (ctx.ResolvedChannelMentions.Any(channel =>
+                !DiscordAuthorization.HasChannelPermissions(ctx.Member, channel,
+                    Permissions.AccessChannels, Permissions.ManageChannels)))
+        {
+            await ctx.CreateResponseAsync("You cannot configure one or more target channels.", true);
+            return;
+        }
+
         await _configService.AddOrUpdate(config);
         await ctx.CreateResponseAsync("Success", true);
     }
@@ -125,6 +135,14 @@ public class NewsManagementCommands : ApplicationCommandModule
         [Option("channels", "Channels where news will be published")] string channels)
     {
         NewsConfig config = await _configService.GetById(id);
+
+        if (ctx.ResolvedChannelMentions.Any(channel =>
+                !DiscordAuthorization.HasChannelPermissions(ctx.Member, channel,
+                    Permissions.AccessChannels, Permissions.ManageChannels)))
+        {
+            await ctx.CreateResponseAsync("You cannot configure one or more target channels.", true);
+            return;
+        }
 
         config = config with { Channels = ctx.ResolvedChannelMentions.Select(ch => ch.Id).ToArray() };
 
@@ -158,7 +176,7 @@ public class NewsManagementCommands : ApplicationCommandModule
     {
         await ctx.DeferAsync();
         await _newsJobProvider.ExecuteAsync(default);
-        await ctx.EditResponseAsync( new DiscordWebhookBuilder().WithContent("News job - done"));
+        await ctx.EditResponseAsync(new DiscordWebhookBuilder().WithContent("News job - done"));
     }
 
     private static DateTime? ParseDateTime(string datetime)

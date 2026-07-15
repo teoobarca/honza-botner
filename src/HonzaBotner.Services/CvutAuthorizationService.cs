@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using HonzaBotner.Database;
 using HonzaBotner.Services.Contract;
 using HonzaBotner.Services.Contract.Dto;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace HonzaBotner.Services;
 
@@ -24,10 +25,12 @@ public class CvutAuthorizationService : IAuthorizationService
     private readonly HttpClient _client;
     private readonly IHashService _hashService;
     private readonly ILogger<CvutAuthorizationService> _logger;
+    private readonly IVerificationChallengeStore _challengeStore;
 
     public CvutAuthorizationService(HonzaBotnerDbContext dbContext, IOptions<CvutConfig> cvutConfig,
         IUsermapInfoService usermapInfoService, IDiscordRoleManager roleManager, HttpClient client,
-        IHashService hashService, ILogger<CvutAuthorizationService> logger)
+        IHashService hashService, ILogger<CvutAuthorizationService> logger,
+        IVerificationChallengeStore challengeStore)
     {
         _dbContext = dbContext;
         _cvutConfig = cvutConfig.Value;
@@ -36,52 +39,86 @@ public class CvutAuthorizationService : IAuthorizationService
         _client = client;
         _hashService = hashService;
         _logger = logger;
+        _challengeStore = challengeStore;
     }
 
-    public async Task<IAuthorizationService.AuthorizeResult> AuthorizeAsync(
+    public async Task<string> PrepareAuthorizationAsync(
         string accessToken,
         string username,
-        ulong userId,
         RolesPool rolesPool
     )
     {
-        if (rolesPool != RolesPool.Auth && !await _roleManager.IsUserDiscordAuthenticated(userId))
-            return IAuthorizationService.AuthorizeResult.AuthorizeFirst;
-
-        bool discordIdPresent = await IsUserVerified(userId);
-
         UsermapPerson? person = await _usermapInfoService.GetUserInfoAsync(accessToken, username);
         if (person == null)
         {
             _logger.LogWarning("Couldn't fetch info from UserMap");
-            return IAuthorizationService.AuthorizeResult.UserMapError;
+            throw new InvalidOperationException("Couldn't fetch verification data from UserMap.");
         }
 
         string authId = _hashService.Hash(person.Username);
-        bool authPresent = await _dbContext.Verifications.AnyAsync(v => v.AuthId == authId);
+        string legacyAuthId = _hashService.LegacyHash(person.Username);
+        IReadOnlySet<ulong> roleIds = _roleManager.MapUsermapRoles(person.Roles, rolesPool)
+            .Select(role => role.RoleId)
+            .ToHashSet();
 
-        IReadOnlySet<DiscordRole> discordRoles = _roleManager.MapUsermapRoles(person.Roles, rolesPool);
+        return _challengeStore.Create(authId, legacyAuthId, rolesPool, roleIds);
+    }
+
+    public async Task<IAuthorizationService.AuthorizeResult> CompleteAuthorizationAsync(string code, ulong userId)
+    {
+        if (!_challengeStore.TryTake(code, out VerificationChallenge? challenge) || challenge is null)
+            return IAuthorizationService.AuthorizeResult.Failed;
+
+        RolesPool rolesPool = challenge.RolesPool;
+        string authId = challenge.AuthId;
+        string legacyAuthId = challenge.LegacyAuthId;
+        HashSet<DiscordRole> discordRoles = challenge.RoleIds.Select(id => new DiscordRole(id)).ToHashSet();
+
+        if (rolesPool != RolesPool.Auth)
+        {
+            Verification? verification = await _dbContext.Verifications.FindAsync(userId);
+            if ((verification?.AuthId != authId && verification?.AuthId != legacyAuthId) ||
+                !await _roleManager.IsUserDiscordAuthenticated(userId))
+                return verification is null
+                    ? IAuthorizationService.AuthorizeResult.AuthorizeFirst
+                    : IAuthorizationService.AuthorizeResult.DifferentMember;
+        }
+
+        bool discordIdPresent = await IsUserVerified(userId);
+        bool authPresent = await _dbContext.Verifications.AnyAsync(v =>
+            v.AuthId == authId || v.AuthId == legacyAuthId);
 
         // discord and auth -> update roles
         if (discordIdPresent && authPresent)
         {
             bool verificationExists =
-                await _dbContext.Verifications.AnyAsync(v => v.UserId == userId && v.AuthId == authId);
+                await _dbContext.Verifications.AnyAsync(v => v.UserId == userId &&
+                                                            (v.AuthId == authId || v.AuthId == legacyAuthId));
 
             if (verificationExists)
             {
+                Verification verification = await _dbContext.Verifications.FindAsync(userId)
+                    ?? throw new InvalidOperationException("Verification disappeared during update.");
+                if (verification.AuthId == legacyAuthId)
+                {
+                    verification.AuthId = authId;
+                    await _dbContext.SaveChangesAsync();
+                }
                 bool revoked = await _roleManager.RevokeRolesPoolAsync(userId, rolesPool);
                 if (!revoked)
                 {
-                    _logger.LogWarning("Revoking roles pool {RolesPool} for {Username} (id {Id}) failed", userId,
-                        username, rolesPool);
+                    _logger.LogWarning("Revoking roles pool {RolesPool} for user id {UserId} failed", rolesPool,
+                        userId);
                     return IAuthorizationService.AuthorizeResult.Failed;
                 }
 
                 bool granted = await _roleManager.GrantRolesAsync(userId, discordRoles);
-                return granted
-                    ? IAuthorizationService.AuthorizeResult.OK
-                    : IAuthorizationService.AuthorizeResult.Failed;
+                if (!granted) return IAuthorizationService.AuthorizeResult.Failed;
+
+                if (rolesPool == RolesPool.Staff) verification.StaffVerifiedAt = DateTime.UtcNow;
+                else verification.LastVerifiedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync();
+                return IAuthorizationService.AuthorizeResult.OK;
             }
 
             return IAuthorizationService.AuthorizeResult.DifferentMember;
@@ -95,33 +132,48 @@ public class CvutAuthorizationService : IAuthorizationService
 
         // nothing -> create database entry, update roles
         {
-            bool rolesGranted = await _roleManager.GrantRolesAsync(userId, discordRoles);
-
-            if (rolesGranted)
+            Verification verification = new()
             {
-                Verification verification = new() { AuthId = authId, UserId = userId };
+                AuthId = authId,
+                UserId = userId,
+                LastVerifiedAt = DateTime.UtcNow
+            };
+            await _dbContext.Verifications.AddAsync(verification);
+            await _dbContext.SaveChangesAsync();
 
-                await _dbContext.Verifications.AddAsync(verification);
-                await _dbContext.SaveChangesAsync();
+            if (await _roleManager.GrantRolesAsync(userId, discordRoles))
+            {
                 await _roleManager.RevokeHostRolesAsync(userId);
                 return IAuthorizationService.AuthorizeResult.OK;
             }
 
+            _dbContext.Verifications.Remove(verification);
+            await _dbContext.SaveChangesAsync();
             return IAuthorizationService.AuthorizeResult.Failed;
         }
     }
 
-    public Task<string> GetAuthLinkAsync(string redirectUri)
+    public Task<string> GetAuthLinkAsync(string redirectUri, string state, string codeChallenge)
     {
-        const string authLink =
-            "https://auth.fit.cvut.cz/oauth/authorize?response_type=code&client_id={0}&redirect_uri={1}";
-
         if (string.IsNullOrEmpty(_cvutConfig.ClientId))
         {
             throw new ArgumentNullException(null, "Invalid config");
         }
 
-        return Task.FromResult(string.Format(authLink, _cvutConfig.ClientId, redirectUri));
+        NameValueCollection parameters = new()
+        {
+            { "response_type", "code" },
+            { "client_id", _cvutConfig.ClientId },
+            { "redirect_uri", redirectUri },
+            { "state", state },
+            { "code_challenge", codeChallenge },
+            { "code_challenge_method", "S256" }
+        };
+        UriBuilder builder = new("https://auth.fit.cvut.cz/oauth/authorize")
+        {
+            Query = parameters.GetQueryString()
+        };
+        return Task.FromResult(builder.Uri.ToString());
     }
 
     public async Task<bool> IsUserVerified(ulong userId)
@@ -130,27 +182,30 @@ public class CvutAuthorizationService : IAuthorizationService
             .AnyAsync(v => v.UserId == userId);
     }
 
-    public async Task<string> GetAccessTokenAsync(string code, string redirectUri)
+    public async Task<string> GetAccessTokenAsync(string code, string redirectUri, string codeVerifier)
     {
         const string tokenUri = "https://auth.fit.cvut.cz/oauth/token";
 
         string credentials =
             Convert.ToBase64String(Encoding.UTF8.GetBytes(_cvutConfig.ClientId + ":" + _cvutConfig.ClientSecret));
-        NameValueCollection queryCollection = new()
+        List<KeyValuePair<string?, string?>> formValues = new()
         {
-            { "grant_type", "authorization_code" }, { "code", code }, { "redirect_uri", redirectUri }
+            new("grant_type", "authorization_code"),
+            new("code", code),
+            new("redirect_uri", redirectUri),
+            new("code_verifier", codeVerifier)
         };
 
-        UriBuilder uriBuilder = new(tokenUri) { Query = queryCollection.GetQueryString() };
-
-        HttpRequestMessage requestMessage = new()
+        using HttpRequestMessage requestMessage = new()
         {
-            RequestUri = uriBuilder.Uri,
+            RequestUri = new Uri(tokenUri),
             Headers = { Authorization = new AuthenticationHeaderValue("Basic", credentials) },
-            Method = HttpMethod.Post
+            Method = HttpMethod.Post,
+            Content = new FormUrlEncodedContent(formValues)
         };
 
-        HttpResponseMessage tokenResponse = await _client.SendAsync(requestMessage);
+        using HttpResponseMessage tokenResponse = await _client.SendAsync(requestMessage,
+            HttpCompletionOption.ResponseHeadersRead);
 
         try
         {
@@ -161,7 +216,7 @@ public class CvutAuthorizationService : IAuthorizationService
             throw new InvalidOperationException("Couldn't authorize user, status code is not successful.", e);
         }
 
-        JsonDocument response = await JsonDocument.ParseAsync(await tokenResponse.Content.ReadAsStreamAsync());
+        using JsonDocument response = await JsonDocument.ParseAsync(await tokenResponse.Content.ReadAsStreamAsync());
 
         return response.RootElement.GetProperty("access_token").GetString()
                ?? throw new InvalidOperationException("Couldn't authorize user.");
@@ -171,14 +226,19 @@ public class CvutAuthorizationService : IAuthorizationService
     {
         const string checkTokenUri = "https://auth.fit.cvut.cz/oauth/check_token";
 
-        UriBuilder uriBuilder = new(checkTokenUri) { Query = $"token={accessToken}" };
-        HttpRequestMessage request = new(HttpMethod.Get, uriBuilder.Uri);
+        using HttpRequestMessage request = new(HttpMethod.Post, checkTokenUri)
+        {
+            Content = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string?, string?>("token", accessToken)
+            })
+        };
 
-        HttpResponseMessage response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        using HttpResponseMessage response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
         response.EnsureSuccessStatusCode();
 
         string responseText = await response.Content.ReadAsStringAsync();
-        JsonDocument user = JsonDocument.Parse(responseText);
+        using JsonDocument user = JsonDocument.Parse(responseText);
 
         return user.RootElement.GetProperty("user_name").GetString()
                ?? throw new InvalidOperationException("Couldn't load information about user");
@@ -200,17 +260,20 @@ public class CvutAuthorizationService : IAuthorizationService
             new("scope", scope)
         };
 
-        FormUrlEncodedContent content = new(contentValues);
+        using FormUrlEncodedContent content = new(contentValues);
 
-        HttpRequestMessage requestMessage = new()
+        using HttpRequestMessage requestMessage = new()
         {
-            RequestUri = uriBuilder.Uri, Method = HttpMethod.Post, Content = content
+            RequestUri = uriBuilder.Uri,
+            Method = HttpMethod.Post,
+            Content = content
         };
 
-        HttpResponseMessage tokenResponse = await _client.SendAsync(requestMessage).ConfigureAwait(false);
+        using HttpResponseMessage tokenResponse = await _client.SendAsync(requestMessage,
+            HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
         tokenResponse.EnsureSuccessStatusCode();
 
-        JsonDocument response =
+        using JsonDocument response =
             await JsonDocument.ParseAsync(await tokenResponse.Content.ReadAsStreamAsync().ConfigureAwait(false));
 
         return response.RootElement.GetProperty("access_token").GetString()

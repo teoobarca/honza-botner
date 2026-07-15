@@ -1,11 +1,11 @@
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HonzaBotner.Scheduler.Contract;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace HonzaBotner.Scheduler;
 
@@ -46,27 +46,25 @@ public class SchedulerHostedService : BackgroundService
 
     private async Task RunOnceAsync(DateTime currentTime, CancellationToken cancellationToken)
     {
-        TaskFactory taskFactory = new(TaskScheduler.Current);
-
         IList<CronJobWrapper> jobsToRun = _cronJobs.Where(job => job.ShouldRun(currentTime)).ToList();
 
         foreach (CronJobWrapper cronJob in jobsToRun)
         {
             cronJob.Next();
 
-            await taskFactory.StartNew(async () =>
+            try
             {
-                try
-                {
-                    _logger.LogInformation("Starting job {JobType}", cronJob.Job.Name);
-                    await cronJob.Job.ExecuteAsync(cancellationToken);
-                }
-                catch (Exception e)
-                {
-                    _logger.LogError(e, "Job {JobType} failed", cronJob.Job.Name);
-                    // NOTE: Exception is not propagated, since we dont want crash scheduler.
-                }
-            }, cancellationToken);
+                _logger.LogInformation("Starting job {JobType}", cronJob.Job.Name);
+                await cronJob.Job.ExecuteAsync(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Job {JobType} failed", cronJob.Job.Name);
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
-﻿using HonzaBotner.Discord.Services.Options;
+﻿using System.Text.Encodings.Web;
+using HonzaBotner.Discord.Services.Options;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -22,10 +23,10 @@ public abstract class BaseController : Controller
         string content = string.Format(
             System.IO.File.ReadAllText("Static/auth.html"),
             success ? string.Empty : "statement--error",
-            message,
-            _options.Value.RepositoryUrl,
-            _options.Value.IssueTrackerUrl,
-            _options.Value.ServerName
+            HtmlEncoder.Default.Encode(message),
+            HtmlEncoder.Default.Encode(_options.Value.RepositoryUrl ?? string.Empty),
+            HtmlEncoder.Default.Encode(_options.Value.IssueTrackerUrl ?? string.Empty),
+            HtmlEncoder.Default.Encode(_options.Value.ServerName ?? string.Empty)
         );
 
         return Content(content, "text/html");

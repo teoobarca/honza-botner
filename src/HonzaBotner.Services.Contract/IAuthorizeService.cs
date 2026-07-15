@@ -14,13 +14,15 @@ public interface IAuthorizationService
         AuthorizeFirst
     }
 
-    Task<AuthorizeResult> AuthorizeAsync(string accessToken, string username, ulong userId, RolesPool rolesPool);
+    Task<string> PrepareAuthorizationAsync(string accessToken, string username, RolesPool rolesPool);
 
-    Task<string> GetAuthLinkAsync(string redirectUri);
+    Task<AuthorizeResult> CompleteAuthorizationAsync(string code, ulong userId);
+
+    Task<string> GetAuthLinkAsync(string redirectUri, string state, string codeChallenge);
 
     Task<bool> IsUserVerified(ulong userId);
 
-    Task<string> GetAccessTokenAsync(string code, string redirectUri);
+    Task<string> GetAccessTokenAsync(string code, string redirectUri, string codeVerifier);
 
     Task<string> GetUserNameAsync(string accessToken);
 

@@ -31,11 +31,19 @@ public interface IRemindersService
     public Task DeleteReminderAsync(int id);
 
     /// <summary>
+    /// Atomically removes a due reminder before delivery. This prevents multiple schedulers or retries
+    /// after a partial Discord delivery from notifying users more than once.
+    /// </summary>
+    public Task<bool> TryClaimReminderAsync(int id);
+
+    /// <summary>
     /// Find reminder bound to the specified message (embed).
     /// </summary>
     /// <param name="messageId">ID of the message</param>
     /// <returns>Reminder bound to that message (if it exists)</returns>
     public Task<Reminder?> GetByMessageIdAsync(ulong messageId);
+
+    public Task<int> CountActiveForUserAsync(ulong ownerId);
 
     /// <summary>
     /// Return all reminders that should be executed.

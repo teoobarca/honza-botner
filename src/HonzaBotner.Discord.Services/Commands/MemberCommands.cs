@@ -5,6 +5,7 @@ using DSharpPlus;
 using DSharpPlus.Entities;
 using DSharpPlus.Exceptions;
 using DSharpPlus.SlashCommands;
+using DSharpPlus.SlashCommands.Attributes;
 using HonzaBotner.Database;
 using HonzaBotner.Discord.Services.Options;
 using HonzaBotner.Services.Contract;
@@ -20,6 +21,7 @@ public class MemberCommands : ApplicationCommandModule
 
     [SlashCommandGroup("member", "member commands")]
     [SlashCommandPermissions(Permissions.ModerateMembers)]
+    [SlashRequirePermissions(Permissions.ModerateMembers)]
     [SlashModuleLifespan(SlashModuleLifespan.Scoped)]
     public class PrivilegedMemberCommands : ApplicationCommandModule
     {
@@ -61,8 +63,9 @@ public class MemberCommands : ApplicationCommandModule
                 string cvutUsername)
             {
                 string authId = _hashService.Hash(cvutUsername);
+                string legacyAuthId = _hashService.LegacyHash(cvutUsername);
                 Verification? databaseRecord = await _dbContext.Verifications
-                    .FirstOrDefaultAsync(v => v.AuthId == authId);
+                    .FirstOrDefaultAsync(v => v.AuthId == authId || v.AuthId == legacyAuthId);
                 await AnnounceMemberInfoAsync(ctx, databaseRecord);
             }
 
@@ -86,7 +89,7 @@ public class MemberCommands : ApplicationCommandModule
                         databaseRecord.UserId);
                 }
 
-                await ctx.CreateResponseAsync(databaseRecord.ToString());
+                await ctx.CreateResponseAsync(databaseRecord.ToString(), true);
             }
         }
 
@@ -130,8 +133,9 @@ public class MemberCommands : ApplicationCommandModule
                 string cvutUsername)
             {
                 string authId = _hashService.Hash(cvutUsername);
+                string legacyAuthId = _hashService.LegacyHash(cvutUsername);
                 Verification? databaseRecord = await _dbContext.Verifications
-                    .FirstOrDefaultAsync(v => v.AuthId == authId);
+                    .FirstOrDefaultAsync(v => v.AuthId == authId || v.AuthId == legacyAuthId);
                 await EraseMemberAsync(ctx, databaseRecord);
             }
 
@@ -147,19 +151,18 @@ public class MemberCommands : ApplicationCommandModule
 
                 try
                 {
-                    _dbContext.Verifications.Remove(databaseRecord);
-                    await _dbContext.SaveChangesAsync();
                     DiscordGuild guild = await _guildProvider.GetCurrentGuildAsync();
                     DiscordMember member = await guild.GetMemberAsync(databaseRecord.UserId);
                     await member.RemoveAsync("User purged from database.");
+                    _dbContext.Verifications.Remove(databaseRecord);
+                    await _dbContext.SaveChangesAsync();
                     await ctx.EditResponseAsync(new DiscordWebhookBuilder().WithContent("Member has been erased."));
                 }
                 catch (UnauthorizedException e)
                 {
                     _logger.LogWarning(e, "Erasing of member failed due to lack of permissions");
                     await ctx.EditResponseAsync(new DiscordWebhookBuilder()
-                        .WithContent("User was purged but not kicked due to insufficient permissions\n" +
-                                     "Please remove verified role manually to prevent unexpected behaviour."));
+                        .WithContent("User was not kicked and the verification record was preserved."));
                 }
                 catch (Exception e)
                 {

@@ -6,6 +6,7 @@ using DSharpPlus;
 using DSharpPlus.Entities;
 using DSharpPlus.Interactivity.Extensions;
 using DSharpPlus.SlashCommands;
+using DSharpPlus.SlashCommands.Attributes;
 using HonzaBotner.Discord.Services.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -34,6 +35,7 @@ public class PinCommands : ApplicationCommandModule
 
     [SlashCommand("delete-pins", "Unpins messages pinned with temporary pins")]
     [SlashCommandPermissions(Permissions.ManageChannels)]
+    [SlashRequirePermissions(Permissions.ManageChannels)]
     public async Task DeleteAllPinsCommandAsync(
         InteractionContext ctx,
         [Option("everywhere", "Do it everywhere instead just in this channel? Default: false")]
@@ -51,6 +53,13 @@ public class PinCommands : ApplicationCommandModule
 
         if (result.TimedOut) return;
 
+        if (everywhere && !ctx.Member.Permissions.HasPermission(Permissions.Administrator))
+        {
+            await ctx.FollowUpAsync(new DiscordFollowupMessageBuilder()
+                .WithContent("Server-wide pin cleanup requires Administrator permission.").AsEphemeral());
+            return;
+        }
+
         var permanentPinEmoji = DiscordEmoji.FromName(_discordWrapper.Client, _pinOptions.PermanentPinName);
         var lockPinEmoji = DiscordEmoji.FromName(_discordWrapper.Client, _pinOptions.LockEmojiName);
         var channelTasks = new List<Task>();
@@ -59,6 +68,8 @@ public class PinCommands : ApplicationCommandModule
         {
             if (pair.Value.Type is ChannelType.Category or ChannelType.Group or ChannelType.Stage or ChannelType.Unknown or ChannelType.Voice) return;
             if (!everywhere && pair.Key != ctx.Channel.Id) return;
+            if (!DiscordAuthorization.HasChannelPermissions(ctx.Member, pair.Value,
+                    Permissions.AccessChannels, Permissions.ManageMessages)) return;
             channelTasks.Add(DeletePinsInChannelAsync(pair.Value, permanentPinEmoji, lockPinEmoji));
         });
 

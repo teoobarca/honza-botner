@@ -87,7 +87,7 @@ internal class DiscordBot : IDiscordBot
     private async Task Client_ClientError(DiscordClient sender, ClientErrorEventArgs e)
     {
         sender.Logger.LogError(e.Exception, "Exception occured");
-        await ReportException( "Client error", e.Exception);
+        await ReportException("Client error", e.Exception);
     }
 
     private Task Commands_CommandInvoked(SlashCommandsExtension e, SlashCommandInvokedEventArgs args)

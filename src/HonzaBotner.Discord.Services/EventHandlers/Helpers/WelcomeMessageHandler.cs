@@ -31,15 +31,17 @@ public abstract class WelcomeMessageHandler
         catch (Exception e)
         {
             logger?.LogWarning(e, "Couldn't get the role");
+            return EventHandlerResult.Continue;
         }
 
         try
         {
             DiscordChannel channel = eventArgs.Guild.GetChannel(channelId);
+            await using FileStream attachment = new(filePath, FileMode.Open, FileAccess.Read);
             await channel.SendMessageAsync(
                 new DiscordMessageBuilder()
                     .WithContent(message)
-                    .AddFile(new FileStream(filePath, FileMode.Open, FileAccess.Read))
+                    .AddFile(attachment)
                     .WithAllowedMention(new UserMention(eventArgs.Member))
             );
         }
