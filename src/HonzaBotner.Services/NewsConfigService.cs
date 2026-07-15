@@ -4,8 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using HonzaBotner.Database;
 using HonzaBotner.Services.Contract;
-using Dto = HonzaBotner.Services.Contract.Dto;
 using Microsoft.EntityFrameworkCore;
+using Dto = HonzaBotner.Services.Contract.Dto;
 
 namespace HonzaBotner.Services;
 

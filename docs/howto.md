@@ -30,6 +30,7 @@ Example file structure:
     "CVUT:ClientSecret": "<client secret>",
     "CVUT:ServiceId": "<service id>",
     "CVUT:ServiceSecret": "<service secret>",
+    "CVUT:IdentityHashKey": "<independent random secret>",
     "DATABASE_URL": "Host=localhost;Database=HonzaBotner;Username=honza-bot;Password=postgres",
     "Discord:Token": "<discord bot token>"
 }
@@ -48,6 +49,24 @@ Discord token can be found on [Discord developer portal][discordDev].
 
 Database URL in the example is working with provided docker image
 which can be found in [compose file][compose].
+
+`CVUT:IdentityHashKey` is used as the HMAC key for pseudonymized CTU identifiers.
+Use a random secret that is independent from the OAuth client secret. Existing
+identifiers are migrated after their next successful verification.
+
+Set `ReverseProxy:TrustForwardedHeaders` to `true` only when the application is
+not directly reachable and its edge proxy overwrites `X-Forwarded-For` and
+`X-Forwarded-Proto`. The bundled production profiles enable this for their
+managed reverse proxies; direct deployments must keep the default value `false`.
+
+Reaction-role bindings are fail-closed. Add every role that users may assign to
+themselves to `CommonCommandOptions:SelfAssignableRoleIds`; bindings to any other
+role are ignored even if an old database row still exists.
+
+Staff role verification expires after 30 days. General CTU verification expires
+after 365 days; the scheduled cleanup revokes mapped access roles and removes the
+link so the user can verify again. Existing records receive one grace period when
+the timestamp migration is applied.
 
 ## Initial configuration
 To be able to run the bot locally you need to setup some configs.
@@ -76,6 +95,11 @@ If everything is OK we can update our DB by the following command:
 dotnet ef database update --project ./src/HonzaBotner
 ```
 
+The bundled configuration applies migrations at startup for backwards-compatible
+deployments. Prefer running this command as a separate deployment step and then
+set `Database:RunMigrationsOnStartup=false`, so the runtime database identity does
+not need schema-changing privileges.
+
 With this, we will get migration based on our code
 
 - All `DbSet\<T>` in `HonzaBotnerDbContext` will be used and their mappings will be applied
@@ -100,6 +124,12 @@ docker-compose up -d
 ```
 
 if everything went well you will see `Starting postgres-botner ... done`.
+
+The development image is pinned to PostgreSQL 17. If `postgres-data` was created
+by another PostgreSQL major version, back it up with `pg_dumpall` using that
+version first, move the old data directory aside, and restore the dump into a
+fresh PostgreSQL 17 directory. PostgreSQL data directories cannot be mounted
+across major versions directly.
 
 After that, you can start up the project in your favorite IDE
 or by typing `dotnet run --project ./src/HonzaBotner/`.

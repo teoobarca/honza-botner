@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Threading.Tasks;
@@ -24,26 +25,31 @@ public class EmojiCounterService : IEmojiCounterService
 
     public async Task IncrementAsync(ulong emojiId)
     {
-        Database.CountedEmoji? emoji = await _dbContext.CountedEmojis.FindAsync(emojiId);
+        int updated = await _dbContext.CountedEmojis
+            .Where(emoji => emoji.Id == emojiId)
+            .ExecuteUpdateAsync(update => update.SetProperty(emoji => emoji.Times, emoji => emoji.Times + 1));
 
-        if (emoji == null)
+        if (updated != 0) return;
+
+        try
         {
-            emoji = new Database.CountedEmoji() { Id = emojiId };
-            await _dbContext.CountedEmojis.AddAsync(emoji);
+            _dbContext.CountedEmojis.Add(new Database.CountedEmoji { Id = emojiId, Times = 1 });
+            await _dbContext.SaveChangesAsync();
         }
-
-        emoji.Times++;
-        await _dbContext.SaveChangesAsync();
+        catch (DbUpdateException)
+        {
+            _dbContext.ChangeTracker.Clear();
+            await _dbContext.CountedEmojis
+                .Where(emoji => emoji.Id == emojiId)
+                .ExecuteUpdateAsync(update => update.SetProperty(emoji => emoji.Times, emoji => emoji.Times + 1));
+        }
     }
 
     public async Task DecrementAsync(ulong emojiId)
     {
-        Database.CountedEmoji? emoji = await _dbContext.CountedEmojis.FindAsync(emojiId);
-
-        if (emoji == null) return;
-
-        emoji.Times--;
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.CountedEmojis
+            .Where(emoji => emoji.Id == emojiId && emoji.Times > 0)
+            .ExecuteUpdateAsync(update => update.SetProperty(emoji => emoji.Times, emoji => emoji.Times - 1));
     }
 
 

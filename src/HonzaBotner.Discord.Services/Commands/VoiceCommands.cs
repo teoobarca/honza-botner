@@ -48,7 +48,7 @@ public class VoiceCommands : ApplicationCommandModule
     [SlashCommand("edit", "Edit voice channel you are connected to.")]
     public async Task EditCommandAsync(
         InteractionContext ctx,
-        [MaximumLength(100)] [Option("name", "Change name")] string? name = null,
+        [MaximumLength(100)][Option("name", "Change name")] string? name = null,
         [Minimum(0), Maximum(99)]
         [Option("limit", "Change limit of people")] long? limit = null,
         [Option("public", "Change whether the channel appears to everyone")] bool? isPublic = null

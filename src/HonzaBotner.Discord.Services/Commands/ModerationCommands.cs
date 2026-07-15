@@ -8,6 +8,7 @@ using DSharpPlus.Exceptions;
 using DSharpPlus.Interactivity;
 using DSharpPlus.Interactivity.Extensions;
 using DSharpPlus.SlashCommands;
+using DSharpPlus.SlashCommands.Attributes;
 using HonzaBotner.Discord.Services.Extensions;
 using HonzaBotner.Services.Contract;
 using HonzaBotner.Services.Contract.Dto;
@@ -17,6 +18,7 @@ namespace HonzaBotner.Discord.Services.Commands;
 
 [SlashCommandGroup("moderation", "Punish members of your server or show/edit their history")]
 [SlashCommandPermissions(Permissions.BanMembers)]
+[SlashRequirePermissions(Permissions.BanMembers)]
 [SlashModuleLifespan(SlashModuleLifespan.Scoped)]
 public class ModerationCommands : ApplicationCommandModule
 {
@@ -32,6 +34,16 @@ public class ModerationCommands : ApplicationCommandModule
     [ContextMenu(ApplicationCommandType.UserContextMenu, "warn")]
     public async Task WarnMenuAsync(ContextMenuContext ctx)
     {
+        if (!ctx.Member.PermissionsIn(ctx.Channel).HasPermission(Permissions.BanMembers) ||
+            (ctx.User.Id != ctx.Guild.OwnerId && ctx.Member.Hierarchy <= ctx.TargetMember.Hierarchy))
+        {
+            await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource,
+                new DiscordInteractionResponseBuilder()
+                    .WithContent("You cannot moderate this member.")
+                    .AsEphemeral());
+            return;
+        }
+
         string modalId = $"warn-{ctx.User.Id}-{ctx.TargetUser.Id}";
         string reasonId = "id-reason";
 
@@ -105,15 +117,16 @@ public class ModerationCommands : ApplicationCommandModule
         InteractionContext ctx,
         [Option("Id", "Id of the entry to show")] long entryid)
     {
-        Warning? warning = await _warningService.GetWarningAsync((int) entryid);
+        Warning? warning = await _warningService.GetWarningAsync((int)entryid);
 
         if (warning is null)
         {
-            await ctx.CreateResponseAsync("Entry with this Id does not exist.");
+            await ctx.CreateResponseAsync("Entry with this Id does not exist.", true);
         }
         else
         {
-            await ctx.CreateResponseAsync($"**Warning {warning.Id}** for user <@{warning.UserId}>:\n" + $"{warning.Reason}");
+            await ctx.CreateResponseAsync($"**Warning {warning.Id}** for user <@{warning.UserId}>:\n" +
+                                          $"{warning.Reason}", true);
         }
     }
 
@@ -137,12 +150,12 @@ public class ModerationCommands : ApplicationCommandModule
 
         if (!embedFields.Any())
         {
-            await ctx.CreateResponseAsync("No moderation entries");
+            await ctx.CreateResponseAsync("No moderation entries", true);
             return;
         }
 
         IEnumerable<Page> pages = interactivity.GeneratePages(embedFields, pageRows: 12);
-        await interactivity.SendPaginatedResponseAsync(ctx.Interaction, false, ctx.User, pages);
+        await interactivity.SendPaginatedResponseAsync(ctx.Interaction, true, ctx.User, pages);
     }
 
     [SlashCommand("delete", "Delete entry with provided Id")]

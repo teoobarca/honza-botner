@@ -16,6 +16,8 @@ namespace HonzaBotner.Discord.Services.Commands;
 [SlashModuleLifespan(SlashModuleLifespan.Scoped)]
 public class ReminderCommands : ApplicationCommandModule
 {
+    private const int MaximumActiveRemindersPerUser = 10;
+    private static readonly TimeSpan MaximumReminderHorizon = TimeSpan.FromDays(365);
 
     private readonly IRemindersService _service;
     private readonly ReminderOptions _options;
@@ -56,6 +58,19 @@ public class ReminderCommands : ApplicationCommandModule
             await ctx.CreateResponseAsync(
                 "It seems like the reminder you are trying to set up is scheduled in past.\n" +
                 "It might be mistake of our parser, can you specify date more precisely?", true);
+            return;
+        }
+
+        if (datetime.Value.ToUniversalTime() - now > MaximumReminderHorizon)
+        {
+            await ctx.CreateResponseAsync("Reminders can be scheduled at most one year in advance.", true);
+            return;
+        }
+
+        if (await _service.CountActiveForUserAsync(ctx.User.Id) >= MaximumActiveRemindersPerUser)
+        {
+            await ctx.CreateResponseAsync(
+                $"You can have at most {MaximumActiveRemindersPerUser} active reminders.", true);
             return;
         }
 

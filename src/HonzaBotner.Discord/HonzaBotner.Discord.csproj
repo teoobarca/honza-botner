@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="System.Net.Security" />
+    <PackageReference Include="System.Net.WebSockets.Client" />
     <PackageReference Include="DSharpPlus" />
     <PackageReference Include="DSharpPlus.Interactivity" />
     <PackageReference Include="DSharpPlus.SlashCommands" />

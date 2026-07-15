@@ -14,7 +14,7 @@ public class AppUrlProvider : IUrlProvider
         _cvutConfig = config.Value;
     }
 
-    public string GetAuthLink(ulong userId, RolesPool pool)
+    public string GetAuthLink(RolesPool pool)
     {
         const string authPath = "/Auth/Authenticate/";
 
@@ -23,6 +23,6 @@ public class AppUrlProvider : IUrlProvider
             throw new InvalidOperationException("Invalid CVUT config");
         }
 
-        return $"{_cvutConfig.AppBaseUrl}{authPath}{userId}/{pool.ToString().ToLowerInvariant()}";
+        return $"{_cvutConfig.AppBaseUrl}{authPath}{pool.ToString().ToLowerInvariant()}";
     }
 }

@@ -26,7 +26,7 @@ public class EventHandlersListBuilder
     internal OrderedEventHandlersList Build()
     {
         return new OrderedEventHandlersList(_eventHandlersHandlers
-            .OrderBy(x => x.Item2)
+            .OrderByDescending(x => x.Item2)
             .Select(tuple => tuple.Item1)
         );
     }

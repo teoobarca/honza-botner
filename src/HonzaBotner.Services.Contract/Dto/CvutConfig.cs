@@ -9,6 +9,7 @@ public class CvutConfig
 
     public string? ServiceId { get; set; }
     public string? ServiceSecret { get; set; }
-    
+
     public string? AppBaseUrl { get; set; }
+    public string? IdentityHashKey { get; set; }
 }

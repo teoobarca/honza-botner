@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -13,6 +14,8 @@ namespace HonzaBotner.Discord.Services.Managers;
 
 public class VoiceManager : IVoiceManager
 {
+    private static readonly ConcurrentDictionary<ulong, DateTimeOffset> CreationCooldowns = new();
+    private static readonly TimeSpan CreationCooldown = TimeSpan.FromSeconds(30);
     private readonly IGuildProvider _guildProvider;
     private readonly CustomVoiceOptions _voiceConfig;
     private readonly ILogger<VoiceManager> _logger;
@@ -29,6 +32,14 @@ public class VoiceManager : IVoiceManager
         DiscordChannel channelToCloneFrom, DiscordMember member,
         string? name, long? limit, bool? isPublic)
     {
+        if (member.VoiceState?.Channel?.Id != channelToCloneFrom.Id)
+            throw new InvalidOperationException("Join the voice creation channel before creating a channel.");
+
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        if (CreationCooldowns.TryGetValue(member.Id, out DateTimeOffset availableAt) && availableAt > now)
+            throw new InvalidOperationException("Please wait before creating another voice channel.");
+
+        CreationCooldowns[member.Id] = now.Add(CreationCooldown);
         name = ConvertStringToValidState(name);
 
         try
@@ -37,26 +48,35 @@ public class VoiceManager : IVoiceManager
             DiscordChannel newChannel =
                 await channelToCloneFrom.CloneAsync($"Member {userName} created new voice channel.");
 
+            await newChannel.AddOverwriteAsync(member,
+                Permissions.AccessChannels | Permissions.ManageChannels | Permissions.UseVoice);
+
             await EditChannelAsync(false, newChannel, name, limit, isPublic, userName);
 
+            bool placementFailed = false;
             try
             {
                 if (member.VoiceState?.Channel != null)
                 {
                     await member.PlaceInAsync(newChannel);
                 }
+                else
+                {
+                    placementFailed = true;
+                }
             }
             catch
             {
                 // User disconnected while we were placing them.
+                placementFailed = true;
             }
 
-            // Placing the member in the channel failed, so remove it after some time.
-            Task _ = Task.Run(async () =>
+            if (placementFailed)
             {
-                await Task.Delay(1000 * _voiceConfig.RemoveAfterCommandInSeconds);
+                // Voice state is cache-driven; give the gateway event a bounded chance to arrive.
+                await Task.Delay(TimeSpan.FromSeconds(1));
                 await DeleteUnusedVoiceChannelAsync(newChannel);
-            });
+            }
         }
         catch (Exception e)
         {
@@ -80,6 +100,9 @@ public class VoiceManager : IVoiceManager
         {
             return false;
         }
+
+        if (!member.VoiceState.Channel.PermissionsFor(member).HasPermission(Permissions.ManageChannels))
+            return false;
 
         try
         {
@@ -149,7 +172,7 @@ public class VoiceManager : IVoiceManager
 
             if (limit is not null)
             {
-                model.Userlimit = (int) Math.Max(Math.Min(limit.Value, 99), 0);
+                model.Userlimit = (int)Math.Max(Math.Min(limit.Value, 99), 0);
             }
         });
 

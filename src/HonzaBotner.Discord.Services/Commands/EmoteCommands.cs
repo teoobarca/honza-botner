@@ -103,7 +103,8 @@ public class EmoteCommands : ApplicationCommandModule
             {
                 Author = new DiscordEmbedBuilder.EmbedAuthor
                 {
-                    IconUrl = ctx.Member.AvatarUrl, Name = ctx.Member.DisplayName
+                    IconUrl = ctx.Member.AvatarUrl,
+                    Name = ctx.Member.DisplayName
                 },
                 Title = "Custom emotes usage stats"
             };
@@ -152,7 +153,8 @@ public class EmoteCommands : ApplicationCommandModule
             {
                 Author = new DiscordEmbedBuilder.EmbedAuthor
                 {
-                    IconUrl = ctx.Member.AvatarUrl, Name = ctx.Member.DisplayName
+                    IconUrl = ctx.Member.AvatarUrl,
+                    Name = ctx.Member.DisplayName
                 },
                 Title = "Custom sticker usage stats"
             };

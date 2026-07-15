@@ -23,11 +23,11 @@ public class BadgeRoleHandler : IEventHandler<GuildMemberUpdateEventArgs>
         _logger = logger;
     }
 
-    public Task<EventHandlerResult> Handle(GuildMemberUpdateEventArgs args)
+    public async Task<EventHandlerResult> Handle(GuildMemberUpdateEventArgs args)
     {
-        if (args.RolesAfter.Count > args.RolesBefore.Count) _ = Task.Run(() => CheckAddedRoles(args));
-        else if (args.RolesAfter.Count < args.RolesBefore.Count) _ = Task.Run(() => CheckRemovedRoles(args));
-        return Task.FromResult(EventHandlerResult.Continue);
+        if (args.RolesAfter.Count > args.RolesBefore.Count) await CheckAddedRoles(args);
+        else if (args.RolesAfter.Count < args.RolesBefore.Count) await CheckRemovedRoles(args);
+        return EventHandlerResult.Continue;
     }
 
     private async Task CheckAddedRoles(GuildMemberUpdateEventArgs args)

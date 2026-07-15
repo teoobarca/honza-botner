@@ -5,6 +5,7 @@ using DSharpPlus;
 using DSharpPlus.Entities;
 using DSharpPlus.Exceptions;
 using DSharpPlus.SlashCommands;
+using DSharpPlus.SlashCommands.Attributes;
 using HonzaBotner.Discord.Managers;
 using HonzaBotner.Discord.Services.Options;
 using Microsoft.Extensions.Options;
@@ -31,12 +32,12 @@ public class BotCommands : ApplicationCommandModule
         DiscordGuild guild = ctx.Guild ?? await _guildProvider.GetCurrentGuildAsync();
         DiscordMember bot = await guild.GetMemberAsync(ctx.Client.CurrentUser.Id);
         DiscordEmbedBuilder embed = new()
-            {
-                Author = new DiscordEmbedBuilder.EmbedAuthor { Name = bot.DisplayName, IconUrl = bot.AvatarUrl },
-                Title = "Information about the bot",
-                Description = content,
-                Color = DiscordColor.CornflowerBlue
-            };
+        {
+            Author = new DiscordEmbedBuilder.EmbedAuthor { Name = bot.DisplayName, IconUrl = bot.AvatarUrl },
+            Title = "Information about the bot",
+            Description = content,
+            Color = DiscordColor.CornflowerBlue
+        };
 
         string version = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
                 ?.InformationalVersion ?? "<unknown version>";
@@ -82,6 +83,7 @@ public class BotCommands : ApplicationCommandModule
 
     [SlashCommandGroup("buttons", "Module used to edit button interactions on messages")]
     [SlashCommandPermissions(Permissions.ManageMessages)]
+    [SlashRequirePermissions(Permissions.ManageMessages)]
     public class ButtonCommands : ApplicationCommandModule
     {
         private readonly IButtonManager _buttonManager;
@@ -91,7 +93,7 @@ public class BotCommands : ApplicationCommandModule
             _buttonManager = manager;
         }
 
-        [SlashCommand("remove","Deletes all button interactions on the message")]
+        [SlashCommand("remove", "Deletes all button interactions on the message")]
         public async Task RemoveButtons(
             InteractionContext ctx,
             [Option("message-link", "URL  of the message")] string url)
@@ -101,6 +103,13 @@ public class BotCommands : ApplicationCommandModule
             if (message is null)
             {
                 throw new ArgumentOutOfRangeException($"Couldn't find message with link: {url}");
+            }
+
+            if (!DiscordAuthorization.HasChannelPermissions(ctx.Member, message.Channel,
+                    Permissions.AccessChannels, Permissions.ManageMessages))
+            {
+                await ctx.CreateResponseAsync("You cannot manage messages in the target channel.", true);
+                return;
             }
 
             try
@@ -116,7 +125,7 @@ public class BotCommands : ApplicationCommandModule
             await ctx.CreateResponseAsync("Removed buttons");
         }
 
-        [SlashCommand("setup","Marks message as verification message")]
+        [SlashCommand("setup", "Marks message as verification message")]
         public async Task SetupButtons(
             InteractionContext ctx,
             [Option("message-link", "URL  of the message")] string url
@@ -127,6 +136,13 @@ public class BotCommands : ApplicationCommandModule
             if (message == null)
             {
                 throw new ArgumentOutOfRangeException($"Couldn't find message with link: {url}");
+            }
+
+            if (!DiscordAuthorization.HasChannelPermissions(ctx.Member, message.Channel,
+                    Permissions.AccessChannels, Permissions.ManageMessages))
+            {
+                await ctx.CreateResponseAsync("You cannot manage messages in the target channel.", true);
+                return;
             }
 
             try

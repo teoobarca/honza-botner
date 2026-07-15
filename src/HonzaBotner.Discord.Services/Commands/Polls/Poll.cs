@@ -16,7 +16,7 @@ public abstract class Poll
         get => OptionsEmoji.GetRange(0, NewChoices.Count);
     }
 
-    protected List<string> NewChoices;
+    protected List<string> NewChoices = new();
 
     public readonly string AuthorMention;
     protected readonly DiscordMessage? ExistingPollMessage;
@@ -47,7 +47,7 @@ public abstract class Poll
         DiscordMessage pollMessage = await channel.SendMessageAsync(new DiscordMessageBuilder()
             .AddEmbed(Build(client)));
 
-        Task _ = Task.Run(async () => { await AddReactionsAsync(client, pollMessage); });
+        await AddReactionsAsync(client, pollMessage);
     }
 
     protected async Task AddReactionsAsync(DiscordClient client, DiscordMessage message, List<string>? reactions = null)

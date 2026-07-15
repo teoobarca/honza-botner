@@ -28,11 +28,10 @@ public class StickerCounterService : IEventHandler<MessageCreateEventArgs>
             return EventHandlerResult.Continue;
         }
 
-        DiscordMessageSticker sticker = args.Message.Stickers[0];
-
-        if (sticker.Type == StickerType.Guild && args.Guild.Stickers.Keys.Contains(sticker.Id))
+        foreach (DiscordMessageSticker sticker in args.Message.Stickers)
         {
-            await _emojiCounterService.IncrementAsync(sticker.Id);
+            if (sticker.Type == StickerType.Guild && args.Guild.Stickers.Keys.Contains(sticker.Id))
+                await _emojiCounterService.IncrementAsync(sticker.Id);
         }
 
         return EventHandlerResult.Continue;

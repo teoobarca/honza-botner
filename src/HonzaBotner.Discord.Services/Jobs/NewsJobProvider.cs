@@ -50,7 +50,7 @@ public class NewsJobProvider : IJob
                 scope.ServiceProvider.GetRequiredService(GetType(newsSource.Publisher.ToType())) as IPublisherService
                 ?? throw new InvalidCastException("Type must be IPublisherService");
 
-            DateTime now = DateTime.Now.AddMinutes(RunOffset);
+            DateTime now = DateTime.UtcNow.AddMinutes(RunOffset);
             IAsyncEnumerable<News> news = newsService.FetchDataAsync(newsSource.Source, newsSource.LastFetched);
 
             await foreach (News item in news.WithCancellation(cancellationToken))

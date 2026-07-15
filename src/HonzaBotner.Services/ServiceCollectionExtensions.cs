@@ -1,4 +1,5 @@
-﻿using HonzaBotner.Services.Contract;
+﻿using System;
+using HonzaBotner.Services.Contract;
 using HonzaBotner.Services.Contract.Dto;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,18 +21,20 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddBotnerServices(this IServiceCollection serviceCollection)
     {
-        serviceCollection.AddScoped<IUsermapInfoService, UserMapInfoService>();
-        serviceCollection.AddHttpClient<IUsermapInfoService, UserMapInfoService>();
+        serviceCollection.AddSingleton<IVerificationChallengeStore, VerificationChallengeStore>();
+        serviceCollection.AddHttpClient<IUsermapInfoService, UserMapInfoService>(client =>
+            client.Timeout = TimeSpan.FromSeconds(15));
         serviceCollection.AddScoped<IDiscordRoleManager, DiscordRoleManager>();
-        serviceCollection.AddHttpClient<IAuthorizationService, CvutAuthorizationService>();
-        serviceCollection.AddScoped<IAuthorizationService, CvutAuthorizationService>();
+        serviceCollection.AddHttpClient<IAuthorizationService, CvutAuthorizationService>(client =>
+            client.Timeout = TimeSpan.FromSeconds(15));
         serviceCollection.AddTransient<IUrlProvider, AppUrlProvider>();
         serviceCollection.AddTransient<IHashService, Sha256HashService>();
         serviceCollection.AddScoped<IEmojiCounterService, EmojiCounterService>();
         serviceCollection.AddScoped<IRoleBindingsService, RoleBindingsService>();
         serviceCollection.AddScoped<IWarningService, WarningService>();
         serviceCollection.AddScoped<IRemindersService, RemindersService>();
-        serviceCollection.AddTransient<CoursesNewsService>();
+        serviceCollection.AddHttpClient<CoursesNewsService>(client =>
+            client.Timeout = TimeSpan.FromSeconds(30));
         serviceCollection.AddTransient<INewsConfigService, NewsConfigService>();
 
         return serviceCollection;

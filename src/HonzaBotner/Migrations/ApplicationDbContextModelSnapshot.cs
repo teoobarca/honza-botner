@@ -139,6 +139,12 @@ namespace HonzaBotner.Migrations
                     b.Property<string>("AuthId")
                         .HasColumnType("text");
 
+                    b.Property<DateTime>("LastVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("StaffVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("UserId");
 
                     b.HasIndex("AuthId")

@@ -81,7 +81,7 @@ public class StaffVerificationEventHandler : IEventHandler<ComponentInteractionC
 
         if (!isAuthenticated)
         {
-            string verificationLink = _urlProvider.GetAuthLink(user.Id, RolesPool.Auth);
+            string verificationLink = _urlProvider.GetAuthLink(RolesPool.Auth);
             builder.Content = _translation["UserNotVerified"];
             builder.AddComponents(
                 new DiscordLinkButtonComponent(
@@ -107,7 +107,7 @@ public class StaffVerificationEventHandler : IEventHandler<ComponentInteractionC
             }
         }
 
-        string link = _urlProvider.GetAuthLink(user.Id, RolesPool.Staff);
+        string link = _urlProvider.GetAuthLink(RolesPool.Staff);
 
         if (isStaffAuthenticated && _buttonOptions.StaffRemoveRoleId is not null)
         {

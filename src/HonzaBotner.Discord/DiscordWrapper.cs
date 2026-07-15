@@ -24,7 +24,12 @@ public class DiscordWrapper
             LoggerFactory = loggerFactory,
             Token = optionsConfig.Token,
             TokenType = TokenType.Bot,
-            Intents = DiscordIntents.All,
+            Intents = DiscordIntents.Guilds |
+                      DiscordIntents.GuildMembers |
+                      DiscordIntents.GuildMessages |
+                      DiscordIntents.GuildMessageReactions |
+                      DiscordIntents.GuildVoiceStates |
+                      DiscordIntents.MessageContents,
             Proxy = new WebProxy() { BypassProxyOnLocal = true }
         };
 
@@ -32,7 +37,8 @@ public class DiscordWrapper
 
         InteractivityConfiguration iConfig = new()
         {
-            Timeout = TimeSpan.FromMinutes(2), AckPaginationButtons = true, ResponseBehavior = InteractionResponseBehavior.Ack
+            Timeout = TimeSpan.FromMinutes(2),
+            ResponseBehavior = InteractionResponseBehavior.Ack
         };
         Interactivity = Client.UseInteractivity(iConfig);
 

@@ -2,20 +2,22 @@ name: .NET Core
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    # a push event from the origin repo, or a PR from external repo
-    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name != 'fit-ctu-discord/honza-botner' }}
-
     steps:
-    - uses: actions/checkout@v4
-    - name: Setup .NET Core
-      uses: actions/setup-dotnet@v4
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       with:
-        dotnet-version: 7.0.x
+        persist-credentials: false
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+      with:
+        global-json-file: global.json
     - name: Install dependencies
-      run: dotnet restore
+      run: dotnet restore --locked-mode
     - name: Build
       run: dotnet build --configuration Release --no-restore
     - name: Test

@@ -6,23 +6,31 @@ using DSharpPlus.Entities;
 using DSharpPlus.Exceptions;
 using DSharpPlus.Interactivity.Extensions;
 using DSharpPlus.SlashCommands;
+using DSharpPlus.SlashCommands.Attributes;
+using HonzaBotner.Discord.Services;
+using HonzaBotner.Discord.Services.Options;
 using HonzaBotner.Services.Contract;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace HonzaBotner.Discord.Services.Commands;
 
 [SlashCommandGroup("message", "Commands to interact with messages.")]
 [SlashCommandPermissions(Permissions.ManageMessages)]
+[SlashRequirePermissions(Permissions.ManageMessages)]
 [SlashModuleLifespan(SlashModuleLifespan.Scoped)]
 public class MessageCommands : ApplicationCommandModule
 {
     private readonly ILogger<MessageCommands> _logger;
     private readonly IRoleBindingsService _roleBindingsService;
+    private readonly CommonCommandOptions _options;
 
-    public MessageCommands(ILogger<MessageCommands> logger, IRoleBindingsService roleBindingsService)
+    public MessageCommands(ILogger<MessageCommands> logger, IRoleBindingsService roleBindingsService,
+        IOptions<CommonCommandOptions> options)
     {
         _logger = logger;
         _roleBindingsService = roleBindingsService;
+        _options = options.Value;
     }
 
     [SlashCommand("send", "Sends a text message to the specified channel.")]
@@ -37,6 +45,21 @@ public class MessageCommands : ApplicationCommandModule
         if (messageToSend is null)
         {
             await ctx.CreateResponseAsync("Could not find linked message, does the bot have access to that channel?");
+            return;
+        }
+
+        if (!DiscordAuthorization.HasChannelPermissions(ctx.Member, messageToSend.Channel,
+                Permissions.AccessChannels, Permissions.ReadMessageHistory) ||
+            !DiscordAuthorization.HasChannelPermissions(ctx.Member, channel,
+                Permissions.AccessChannels, Permissions.SendMessages))
+        {
+            await ctx.CreateResponseAsync("You do not have access to the source or target channel.", true);
+            return;
+        }
+
+        if (mention && !ctx.Member.PermissionsIn(channel).HasPermission(Permissions.MentionEveryone))
+        {
+            await ctx.CreateResponseAsync("You cannot relay mass mentions in the target channel.", true);
             return;
         }
 
@@ -69,6 +92,21 @@ public class MessageCommands : ApplicationCommandModule
         if (oldMessage is null || newMessage is null)
         {
             await ctx.CreateResponseAsync("Could not resolve one of the provided messages");
+            return;
+        }
+
+        if (!DiscordAuthorization.HasChannelPermissions(ctx.Member, newMessage.Channel,
+                Permissions.AccessChannels, Permissions.ReadMessageHistory) ||
+            !DiscordAuthorization.HasChannelPermissions(ctx.Member, oldMessage.Channel,
+                Permissions.AccessChannels, Permissions.ManageMessages))
+        {
+            await ctx.CreateResponseAsync("You do not have access to the source or target message.", true);
+            return;
+        }
+
+        if (mention && !ctx.Member.PermissionsIn(oldMessage.Channel).HasPermission(Permissions.MentionEveryone))
+        {
+            await ctx.CreateResponseAsync("You cannot relay mass mentions in the target channel.", true);
             return;
         }
 
@@ -106,6 +144,13 @@ public class MessageCommands : ApplicationCommandModule
         if (oldMessage is null)
         {
             await ctx.CreateResponseAsync("Could not find message to react to.");
+            return;
+        }
+
+        if (!DiscordAuthorization.HasChannelPermissions(ctx.Member, oldMessage.Channel,
+                Permissions.AccessChannels, Permissions.ReadMessageHistory, Permissions.ManageMessages))
+        {
+            await ctx.CreateResponseAsync("You cannot manage messages in the target channel.", true);
             return;
         }
 
@@ -158,14 +203,33 @@ public class MessageCommands : ApplicationCommandModule
             return;
         }
 
+        if (!DiscordAuthorization.HasChannelPermissions(ctx.Member, message.Channel,
+                Permissions.AccessChannels, Permissions.ReadMessageHistory, Permissions.ManageMessages) ||
+            !ctx.Member.Permissions.HasPermission(Permissions.ManageRoles))
+        {
+            await ctx.CreateResponseAsync("Managing role bindings requires Manage Roles and access to the target channel.", true);
+            return;
+        }
+
+        DiscordRole[] resolvedRoles = ctx.ResolvedRoleMentions.ToArray();
+        if (resolvedRoles.Length == 0 || resolvedRoles.Any(role =>
+                !DiscordAuthorization.CanDelegateRole(ctx.Member, ctx.Guild.CurrentMember, role,
+                    _options.SelfAssignableRoleIds.Contains(role.Id))))
+        {
+            await ctx.CreateResponseAsync(
+                "Every role must be explicitly allowlisted for self-assignment, unmanaged, non-privileged, " +
+                "and below both your and the bot's highest role.", true);
+            return;
+        }
+
         ulong channelId = message.ChannelId;
         ulong messageId = message.Id;
 
         await ctx.CreateResponseAsync("React to this message with emoji you want to (un)bind");
         var interactivity = ctx.Client.GetInteractivity();
-        var response =
-            await interactivity.WaitForReactionAsync(ctx.GetOriginalResponseAsync().Result, ctx.User,
-                TimeSpan.FromMinutes(2));
+        DiscordMessage responseMessage = await ctx.GetOriginalResponseAsync();
+        var response = await interactivity.WaitForReactionAsync(responseMessage, ctx.User,
+            TimeSpan.FromMinutes(2));
 
         if (response.TimedOut)
         {
@@ -180,12 +244,12 @@ public class MessageCommands : ApplicationCommandModule
                 case "add":
                     await message.CreateReactionAsync(response.Result.Emoji);
                     await _roleBindingsService.AddBindingsAsync(channelId, messageId, response.Result.Emoji.Name,
-                        ctx.ResolvedRoleMentions.Select(r => r.Id).ToHashSet());
+                        resolvedRoles.Select(r => r.Id).ToHashSet());
                     break;
                 case "remove":
                     bool someRemained = await _roleBindingsService.RemoveBindingsAsync(channelId, messageId,
                         response.Result.Emoji.Name,
-                        ctx.ResolvedRoleMentions.Select(r => r.Id).ToHashSet());
+                        resolvedRoles.Select(r => r.Id).ToHashSet());
                     if (!someRemained) await message.DeleteReactionsEmojiAsync(response.Result.Emoji);
                     break;
             }

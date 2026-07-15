@@ -44,7 +44,7 @@ public class VerificationEventHandler : IEventHandler<ComponentInteractionCreate
         DiscordInteractionResponseBuilder builder = new DiscordInteractionResponseBuilder().AsEphemeral(true);
         DiscordUser user = eventArgs.User;
         DiscordMember member = await eventArgs.Guild.GetMemberAsync(user.Id);
-        string link = _urlProvider.GetAuthLink(user.Id, RolesPool.Auth);
+        string link = _urlProvider.GetAuthLink(RolesPool.Auth);
 
         // Check if the user is authenticated.
         bool isAuthenticated = _discordRoleConfig.AuthenticatedRoleIds.Any(

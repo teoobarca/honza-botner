@@ -19,6 +19,7 @@ public class CommonCommandOptions
     public string HornyJailFilePath { get; set; } = "";
 
     public ulong[]? ReactionIgnoreChannels { get; set; }
+    public ulong[] SelfAssignableRoleIds { get; set; } = [];
 
     public ulong StandUpRoleId { get; set; }
     public ulong StandUpChannelId { get; set; }

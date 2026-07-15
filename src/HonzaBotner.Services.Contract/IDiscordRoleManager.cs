@@ -10,7 +10,7 @@ public interface IDiscordRoleManager
 
     Task<bool> GrantRolesAsync(ulong userId, IReadOnlySet<DiscordRole> discordRoles);
 
-    Task<bool> RevokeRolesPoolAsync(ulong userId, RolesPool rolesPool);
+    Task<bool> RevokeRolesPoolAsync(ulong userId, RolesPool rolesPool, bool includeAuthenticatedRoles = false);
 
     Task RevokeHostRolesAsync(ulong userId);
 
